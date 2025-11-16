@@ -1,0 +1,38 @@
+# Build artifacts
+obj/
+bin/
+*.o
+*.d
+*.out
+
+# Executables
+resource-monitor
+test_*
+
+# Logs
+*.log
+vgcore.*
+core
+
+# Data files
+*.csv
+*.json
+!scripts/*.json
+
+# Editor files
+*~
+.*.swp
+.vscode/
+.idea/
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+/tmp/
+*.tmp
+
+# Valgrind
+valgrind*.log
