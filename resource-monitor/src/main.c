@@ -7,10 +7,8 @@
 #include <errno.h>
 #include "monitor.h"
 
-// Flag para controlar loop de monitoramento
 static volatile int keep_running = 1;
 
-// Handler para SIGINT (Ctrl+C)
 void sigint_handler(int sig) {
     (void)sig;
     keep_running = 0;
@@ -22,18 +20,20 @@ void print_usage(const char *program_name) {
     printf("Options:\n");
     printf("  -i, --interval <seconds>  Monitoring interval (default: 1)\n");
     printf("  -c, --count <n>          Number of samples (default: infinite)\n");
+    printf("  -m, --mode <mode>        Monitoring mode: all, cpu, mem, io (default: all)\n");
     printf("  -h, --help               Show this help message\n\n");
     printf("Examples:\n");
     printf("  %s 1234                  Monitor process 1234\n", program_name);
     printf("  %s -i 2 -c 10 1234       Monitor every 2s for 10 samples\n", program_name);
+    printf("  %s -m io 1234            Monitor only I/O metrics\n", program_name);
     printf("  %s self                  Monitor this process\n", program_name);
 }
 
 int main(int argc, char *argv[]) {
-    // Parâmetros padrão
     pid_t target_pid = 0;
     int interval = 1;
-    int count = -1; // -1 = infinito
+    int count = -1;
+    char mode[16] = "all";
     
     // Parsear argumentos
     for (int i = 1; i < argc; i++) {
@@ -47,9 +47,6 @@ int main(int argc, char *argv[]) {
                     fprintf(stderr, "Error: interval must be positive\n");
                     return EXIT_FAILURE;
                 }
-            } else {
-                fprintf(stderr, "Error: -i requires an argument\n");
-                return EXIT_FAILURE;
             }
         } else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--count") == 0) {
             if (i + 1 < argc) {
@@ -58,14 +55,15 @@ int main(int argc, char *argv[]) {
                     fprintf(stderr, "Error: count must be positive\n");
                     return EXIT_FAILURE;
                 }
-            } else {
-                fprintf(stderr, "Error: -c requires an argument\n");
-                return EXIT_FAILURE;
+            }
+        } else if (strcmp(argv[i], "-m") == 0 || strcmp(argv[i], "--mode") == 0) {
+            if (i + 1 < argc) {
+                strncpy(mode, argv[++i], sizeof(mode) - 1);
+                mode[sizeof(mode) - 1] = '\0';
             }
         } else if (strcmp(argv[i], "self") == 0) {
             target_pid = getpid();
         } else {
-            // Assumir que é o PID
             target_pid = atoi(argv[i]);
             if (target_pid <= 0) {
                 fprintf(stderr, "Error: invalid PID '%s'\n", argv[i]);
@@ -74,20 +72,17 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Validar PID
     if (target_pid == 0) {
         fprintf(stderr, "Error: no PID specified\n\n");
         print_usage(argv[0]);
         return EXIT_FAILURE;
     }
 
-    // Verificar se processo existe
     if (!process_exists(target_pid)) {
         fprintf(stderr, "Error: process %d does not exist\n", target_pid);
         return EXIT_FAILURE;
     }
 
-    // Obter nome do processo
     char process_name[256];
     if (get_process_name(target_pid, process_name, sizeof(process_name)) == 0) {
         printf("Monitoring process: %s (PID: %d)\n", process_name, target_pid);
@@ -95,7 +90,7 @@ int main(int argc, char *argv[]) {
         printf("Monitoring PID: %d\n", target_pid);
     }
     
-    printf("Interval: %d second(s)\n", interval);
+    printf("Mode: %s | Interval: %d second(s)\n", mode, interval);
     if (count > 0) {
         printf("Samples: %d\n", count);
     } else {
@@ -103,72 +98,62 @@ int main(int argc, char *argv[]) {
     }
     printf("\n");
 
-    // Configurar handler para Ctrl+C
     signal(SIGINT, sigint_handler);
 
-    // Estruturas para métricas
     cpu_metrics_t cpu_metrics;
     memory_metrics_t mem_metrics;
+    io_metrics_t io_metrics;
 
-    // Loop de monitoramento
+    int monitor_cpu = (strcmp(mode, "all") == 0 || strcmp(mode, "cpu") == 0);
+    int monitor_mem = (strcmp(mode, "all") == 0 || strcmp(mode, "mem") == 0);
+    int monitor_io = (strcmp(mode, "all") == 0 || strcmp(mode, "io") == 0);
+
     int samples = 0;
     while (keep_running && (count < 0 || samples < count)) {
         printf("=== Sample %d ===\n", samples + 1);
 
-        // Verificar se processo ainda existe
         if (!process_exists(target_pid)) {
             printf("\nProcess terminated.\n");
             break;
         }
 
-        // Coletar CPU
-        if (collect_cpu_metrics(target_pid, &cpu_metrics) == 0) {
-            print_cpu_metrics(&cpu_metrics);
-        } else {
-            fprintf(stderr, "Warning: failed to collect CPU metrics\n");
+        if (monitor_cpu) {
+            if (collect_cpu_metrics(target_pid, &cpu_metrics) == 0) {
+                print_cpu_metrics(&cpu_metrics);
+                printf("\n");
+            }
         }
 
-        printf("\n");
-
-        // Coletar Memória
-        if (collect_memory_metrics(target_pid, &mem_metrics) == 0) {
-            print_memory_metrics(&mem_metrics);
-            
-            double mem_percent = get_memory_usage_percent(&mem_metrics);
-            if (mem_percent >= 0) {
-                printf("  System Usage:     %.2f%%\n", mem_percent);
-            }
-
-            double leak_rate = detect_memory_leak(&mem_metrics);
-            if (samples > 0) { // Só mostra após primeira iteração
-                printf("  Growth Rate:      %.2f KB/s", leak_rate / 1024.0);
-                if (leak_rate > 1024 * 10) { // Mais de 10 KB/s
-                    printf(" ⚠️  Possible memory leak!");
+        if (monitor_mem) {
+            if (collect_memory_metrics(target_pid, &mem_metrics) == 0) {
+                print_memory_metrics(&mem_metrics);
+                double mem_percent = get_memory_usage_percent(&mem_metrics);
+                if (mem_percent >= 0) {
+                    printf("  System Usage:     %.2f%%\n", mem_percent);
                 }
                 printf("\n");
             }
-        } else {
-            fprintf(stderr, "Warning: failed to collect memory metrics\n");
         }
 
-        printf("\n");
+        if (monitor_io) {
+            if (collect_io_metrics(target_pid, &io_metrics) == 0) {
+                print_io_metrics(&io_metrics);
+                printf("\n");
+            } else if (samples == 0) {
+                fprintf(stderr, "Warning: I/O monitoring requires root permissions\n\n");
+            }
+        }
 
         samples++;
 
-        // Aguardar próximo intervalo (se não for última amostra)
         if (count < 0 || samples < count) {
             sleep(interval);
         }
     }
 
     printf("\nMonitoring stopped. Total samples: %d\n", samples);
-
     return EXIT_SUCCESS;
 }
-
-// ============================================================================
-// Implementação das funções utilitárias
-// ============================================================================
 
 int process_exists(pid_t pid) {
     char path[256];
@@ -195,7 +180,6 @@ int get_process_name(pid_t pid, char *name, size_t size) {
         return -1;
     }
 
-    // Remover newline
     size_t len = strlen(name);
     if (len > 0 && name[len - 1] == '\n') {
         name[len - 1] = '\0';
