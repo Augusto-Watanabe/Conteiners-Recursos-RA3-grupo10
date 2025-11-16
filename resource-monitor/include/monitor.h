@@ -74,6 +74,27 @@ int collect_network_metrics(pid_t pid, network_metrics_t *metrics);
 void print_network_metrics(const network_metrics_t *metrics);
 
 // ============================================================================
+// EXPORT
+// ============================================================================
+
+int export_metrics_csv(const char *filename,
+                       pid_t pid,
+                       const cpu_metrics_t *cpu,
+                       const memory_metrics_t *mem,
+                       const io_metrics_t *io);
+
+int export_metrics_json(const char *filename,
+                        pid_t pid,
+                        const cpu_metrics_t *cpu,
+                        const memory_metrics_t *mem,
+                        const io_metrics_t *io);
+
+void print_metrics_summary(pid_t pid,
+                          const cpu_metrics_t *cpu,
+                          const memory_metrics_t *mem,
+                          const io_metrics_t *io);
+
+// ============================================================================
 // UTILITIES
 // ============================================================================
 
