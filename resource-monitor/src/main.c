@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <getopt.h>
 #include "monitor.h"
+#include "namespace.h"
 
 static volatile int keep_running = 1;
 
@@ -18,7 +19,7 @@ void sigint_handler(int sig) {
 
 void print_usage(const char *program_name) {
     printf("Usage: %s [OPTIONS] <PID>\n\n", program_name);
-    printf("Monitor system resources of a process\n\n");
+    printf("Monitor system resources and namespaces of a process\n\n");
     
     printf("Options:\n");
     printf("  -i, --interval <sec>   Monitoring interval in seconds (default: 1)\n");
@@ -28,6 +29,8 @@ void print_usage(const char *program_name) {
     printf("  -f, --format <fmt>     Export format: csv, json (default: csv)\n");
     printf("  -q, --quiet            Quiet mode (no terminal output)\n");
     printf("  -s, --summary          Summary mode (compact output)\n");
+    printf("  -N, --namespace        Show namespace information before monitoring\n");
+    printf("  -C, --compare <pid2>   Compare namespaces with another PID and exit\n");
     printf("  -h, --help             Show this help message\n");
     printf("  -v, --version          Show version information\n\n");
     
@@ -37,21 +40,19 @@ void print_usage(const char *program_name) {
     
     printf("Examples:\n");
     printf("  %s 1234                          Monitor process 1234\n", program_name);
-    printf("  %s -i 2 -c 10 1234               Monitor every 2s for 10 samples\n", program_name);
-    printf("  %s -m io 1234                    Monitor only I/O metrics\n", program_name);
+    printf("  %s -N 1234                       Show namespace info for 1234\n", program_name);
+    printf("  %s -C 5678 1234                  Compare namespaces between 1234 and 5678\n", program_name);
     printf("  %s -o data.csv 1234              Export to CSV file\n", program_name);
-    printf("  %s -o data.json -f json 1234     Export to JSON file\n", program_name);
-    printf("  %s -s -c 60 self                 Summary mode, 60 samples\n", program_name);
     printf("\n");
 }
 
 void print_version(void) {
     printf("Resource Monitor v1.0\n");
+    printf("With Namespace Analysis Support\n");
     printf("Compiled on %s %s\n", __DATE__, __TIME__);
 }
 
 int main(int argc, char *argv[]) {
-    // Parâmetros padrão
     pid_t target_pid = 0;
     int interval = 1;
     int count = -1;
@@ -60,25 +61,27 @@ int main(int argc, char *argv[]) {
     char format[16] = "csv";
     int quiet = 0;
     int summary = 0;
+    int show_namespace = 0;
+    pid_t compare_pid = 0;
 
-    // Opções longas
     static struct option long_options[] = {
-        {"interval", required_argument, 0, 'i'},
-        {"count",    required_argument, 0, 'c'},
-        {"mode",     required_argument, 0, 'm'},
-        {"output",   required_argument, 0, 'o'},
-        {"format",   required_argument, 0, 'f'},
-        {"quiet",    no_argument,       0, 'q'},
-        {"summary",  no_argument,       0, 's'},
-        {"help",     no_argument,       0, 'h'},
-        {"version",  no_argument,       0, 'v'},
+        {"interval",  required_argument, 0, 'i'},
+        {"count",     required_argument, 0, 'c'},
+        {"mode",      required_argument, 0, 'm'},
+        {"output",    required_argument, 0, 'o'},
+        {"format",    required_argument, 0, 'f'},
+        {"quiet",     no_argument,       0, 'q'},
+        {"summary",   no_argument,       0, 's'},
+        {"namespace", no_argument,       0, 'N'},
+        {"compare",   required_argument, 0, 'C'},
+        {"help",      no_argument,       0, 'h'},
+        {"version",   no_argument,       0, 'v'},
         {0, 0, 0, 0}
     };
 
-    // Parsear argumentos
     int opt;
     int option_index = 0;
-    while ((opt = getopt_long(argc, argv, "i:c:m:o:f:qshv", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "i:c:m:o:f:qsNC:hv", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'i':
                 interval = atoi(optarg);
@@ -121,6 +124,16 @@ int main(int argc, char *argv[]) {
             case 's':
                 summary = 1;
                 break;
+            case 'N':
+                show_namespace = 1;
+                break;
+            case 'C':
+                compare_pid = atoi(optarg);
+                if (compare_pid <= 0) {
+                    fprintf(stderr, "Error: invalid PID '%s'\n", optarg);
+                    return EXIT_FAILURE;
+                }
+                break;
             case 'h':
                 print_usage(argv[0]);
                 return EXIT_SUCCESS;
@@ -135,7 +148,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Obter PID dos argumentos restantes
+    // Obter PID
     if (optind < argc) {
         if (strcmp(argv[optind], "self") == 0) {
             target_pid = getpid();
@@ -159,13 +172,44 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    // Modo comparação de namespaces
+    if (compare_pid > 0) {
+        if (!process_exists(compare_pid)) {
+            fprintf(stderr, "Error: process %d does not exist\n", compare_pid);
+            return EXIT_FAILURE;
+        }
+        
+        namespace_comparison_t comparisons[MAX_NAMESPACES];
+        int comp_count;
+        
+        if (compare_process_namespaces(target_pid, compare_pid, comparisons, &comp_count) == 0) {
+            print_namespace_comparison(target_pid, compare_pid, comparisons, comp_count);
+        } else {
+            fprintf(stderr, "Error comparing namespaces\n");
+            return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+    }
+
+    // Se só quer ver namespace, mostrar e sair
+    if (show_namespace && count < 0) {
+        process_namespaces_t ns_info;
+        if (list_process_namespaces(target_pid, &ns_info) == 0) {
+            print_process_namespaces(&ns_info);
+        } else {
+            fprintf(stderr, "Error listing namespaces\n");
+            return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+    }
+
     // Obter nome do processo
     char process_name[256];
     if (get_process_name(target_pid, process_name, sizeof(process_name)) != 0) {
         snprintf(process_name, sizeof(process_name), "unknown");
     }
 
-    // Header de informações
+    // Header
     if (!quiet) {
         printf("╔════════════════════════════════════════════════════════════╗\n");
         printf("║            Resource Monitor - Process Profiler             ║\n");
@@ -185,30 +229,33 @@ int main(int argc, char *argv[]) {
             printf("Export File: %s (format: %s)\n", output_file, format);
         }
         
+        // Mostrar namespace info no início se solicitado
+        if (show_namespace) {
+            printf("\n");
+            process_namespaces_t ns_info;
+            if (list_process_namespaces(target_pid, &ns_info) == 0) {
+                print_process_namespaces(&ns_info);
+            }
+        }
+        
         printf("\n");
     }
 
-    // Configurar handler para Ctrl+C
     signal(SIGINT, sigint_handler);
 
-    // Estruturas para métricas
     cpu_metrics_t cpu_metrics;
     memory_metrics_t mem_metrics;
     io_metrics_t io_metrics;
 
-    // Determinar o que monitorar
     int monitor_cpu = (strcmp(mode, "all") == 0 || strcmp(mode, "cpu") == 0);
     int monitor_mem = (strcmp(mode, "all") == 0 || strcmp(mode, "mem") == 0);
     int monitor_io = (strcmp(mode, "all") == 0 || strcmp(mode, "io") == 0);
 
-    // Variáveis para controle
     int samples = 0;
     int errors = 0;
     int io_permission_warned = 0;
 
-    // Loop de monitoramento
     while (keep_running && (count < 0 || samples < count)) {
-        // Verificar se processo ainda existe
         if (!process_exists(target_pid)) {
             if (!quiet) {
                 printf("\n⚠️  Process terminated after %d samples.\n", samples);
@@ -216,12 +263,10 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        // Ponteiros para métricas (NULL se não coletadas)
         cpu_metrics_t *cpu_ptr = NULL;
         memory_metrics_t *mem_ptr = NULL;
         io_metrics_t *io_ptr = NULL;
 
-        // Coletar CPU
         if (monitor_cpu) {
             if (collect_cpu_metrics(target_pid, &cpu_metrics) == 0) {
                 cpu_ptr = &cpu_metrics;
@@ -232,13 +277,9 @@ int main(int argc, char *argv[]) {
                 }
             } else {
                 errors++;
-                if (!quiet) {
-                    fprintf(stderr, "Warning: failed to collect CPU metrics\n");
-                }
             }
         }
 
-        // Coletar Memória
         if (monitor_mem) {
             if (collect_memory_metrics(target_pid, &mem_metrics) == 0) {
                 mem_ptr = &mem_metrics;
@@ -252,13 +293,9 @@ int main(int argc, char *argv[]) {
                 }
             } else {
                 errors++;
-                if (!quiet) {
-                    fprintf(stderr, "Warning: failed to collect memory metrics\n");
-                }
             }
         }
 
-        // Coletar I/O
         if (monitor_io) {
             if (collect_io_metrics(target_pid, &io_metrics) == 0) {
                 io_ptr = &io_metrics;
@@ -276,7 +313,6 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        // Modo summary
         if (!quiet && summary && samples > 0) {
             if (samples % 10 == 0) {
                 printf("\n");
@@ -284,28 +320,21 @@ int main(int argc, char *argv[]) {
             print_metrics_summary(target_pid, cpu_ptr, mem_ptr, io_ptr);
         }
 
-        // Exportar dados
         if (strlen(output_file) > 0) {
             if (strcmp(format, "csv") == 0) {
-                if (export_metrics_csv(output_file, target_pid, cpu_ptr, mem_ptr, io_ptr) != 0) {
-                    fprintf(stderr, "Error: failed to export to CSV\n");
-                }
+                export_metrics_csv(output_file, target_pid, cpu_ptr, mem_ptr, io_ptr);
             } else if (strcmp(format, "json") == 0) {
-                if (export_metrics_json(output_file, target_pid, cpu_ptr, mem_ptr, io_ptr) != 0) {
-                    fprintf(stderr, "Error: failed to export to JSON\n");
-                }
+                export_metrics_json(output_file, target_pid, cpu_ptr, mem_ptr, io_ptr);
             }
         }
 
         samples++;
 
-        // Aguardar próximo intervalo (se não for última amostra)
         if (count < 0 || samples < count) {
             sleep(interval);
         }
     }
 
-    // Relatório final
     if (!quiet) {
         printf("\n");
         printf("╔════════════════════════════════════════════════════════════╗\n");

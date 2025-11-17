@@ -219,3 +219,5 @@ $(OBJ_DIR)/%.d: $(SRC_DIR)/%.c
 $(OBJ_DIR)/%.d: $(TEST_DIR)/%.c
 	@mkdir -p $(OBJ_DIR)
 	@$(CC) $(CFLAGS) $(INCLUDES) -MM -MT '$(OBJ_DIR)/$*.o' $< > $@
+
+SOURCES = $(wildcard $(SRC_DIR)/*.c)
