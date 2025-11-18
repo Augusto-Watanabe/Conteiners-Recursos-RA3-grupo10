@@ -235,3 +235,17 @@ void print_cgroup_metrics(const cgroup_metrics_t *metrics);
 const char* cgroup_controller_to_string(cgroup_controller_t controller);
 
 #endif // CGROUP_H
+// ============================================================================
+// Funções de Relatório
+// ============================================================================
+
+/**
+ * Gera relatório de utilização vs limites de um processo
+ */
+int generate_cgroup_utilization_report(pid_t pid, const char *output_file);
+
+/**
+ * Compara utilização de múltiplos processos
+ */
+int compare_cgroup_utilization(pid_t *pids, int count, const char *output_file);
+

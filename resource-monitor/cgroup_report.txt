@@ -1,0 +1,36 @@
+╔════════════════════════════════════════════════════════════╗
+║         Cgroup Utilization Report                         ║
+╚════════════════════════════════════════════════════════════╝
+
+Generated: Mon Nov 17 22:38:57 2025
+Process ID: 1
+
+CPU Resource Usage:
+───────────────────────────────────────
+  Total Usage:     23.34 seconds
+  User Mode:       9.85 seconds
+  System Mode:     13.49 seconds
+
+  Configured Limit: Unlimited
+
+Memory Resource Usage:
+───────────────────────────────────────
+  Current:         15.68 MB
+  Peak:            208.29 MB
+  RSS:             0.00 MB
+  Cache:           0.00 MB
+
+  Configured Limit: Unlimited
+
+Process Limits:
+───────────────────────────────────────
+  Current PIDs:    16
+  PID Limit:       9472
+  Usage:           0.17%
+
+Summary:
+───────────────────────────────────────
+  Cgroup Path:     /sys/fs/cgroup/init.scope
+  Cgroup Version:  v2
+  Controllers:     CPU Memory PIDs 
+
