@@ -217,6 +217,14 @@ int set_cgroup_memory_limit(const char *cgroup_path, uint64_t bytes);
  */
 int set_cgroup_io_limit(const char *cgroup_path, const char *device,
                        uint64_t rbps, uint64_t wbps);
+// Funções auxiliares para o main
+int create_cgroup_for_controllers(const char *name,
+                                  char *cpu_path_out, size_t cpu_path_size,
+                                  char *mem_path_out, size_t mem_path_size);
+
+int read_cgroup_metrics_from_path(const char *cpu_path, const char *mem_path, cgroup_metrics_t *metrics);
+
+void cleanup_cgroup(const char *name);
 
 // ============================================================================
 // Funções de Impressão
@@ -235,3 +243,17 @@ void print_cgroup_metrics(const cgroup_metrics_t *metrics);
 const char* cgroup_controller_to_string(cgroup_controller_t controller);
 
 #endif // CGROUP_H
+// ============================================================================
+// Funções de Relatório
+// ============================================================================
+
+/**
+ * Gera relatório de utilização vs limites de um processo
+ */
+int generate_cgroup_utilization_report(pid_t pid, const char *output_file);
+
+/**
+ * Compara utilização de múltiplos processos
+ */
+int compare_cgroup_utilization(pid_t *pids, int count, const char *output_file);
+

@@ -55,7 +55,7 @@ $(TARGET): $(OBJECTS)
 	@echo "Build successful!"
 
 # Compilar arquivos .c em .o
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(HEADERS)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	@echo "Compiling $<..."
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
@@ -67,10 +67,15 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(HEADERS)
 tests: directories $(TEST_BINS)
 	@echo "All tests compiled successfully!"
 
+# Define os objetos da biblioteca (todos os .o de src/ exceto main.o)
+LIB_OBJECTS = $(filter-out $(OBJ_DIR)/main.o, $(OBJECTS))
+
 # Compilar cada teste individualmente
-$(BIN_DIR)/test_%: $(OBJ_DIR)/test_%.o $(filter-out $(OBJ_DIR)/main.o, $(OBJECTS))
+$(BIN_DIR)/test_%: $(OBJ_DIR)/test_%.o $(LIB_OBJECTS)
 	@echo "Linking test $@..."
-	$(CC) $^ -o $@ $(LDFLAGS) $(LIBS)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(LIBS)
+
+$(OBJ_DIR)/test_%.o: $(TEST_DIR)/test_%.c
 
 # Compilar arquivos de teste
 $(OBJ_DIR)/test_%.o: $(TEST_DIR)/test_%.c $(HEADERS)
@@ -220,4 +225,8 @@ $(OBJ_DIR)/%.d: $(TEST_DIR)/%.c
 	@mkdir -p $(OBJ_DIR)
 	@$(CC) $(CFLAGS) $(INCLUDES) -MM -MT '$(OBJ_DIR)/$*.o' $< > $@
 
-SOURCES = $(wildcard $(SRC_DIR)/*.c)
+.PHONY: integration-test
+integration-test: all
+	@echo "Running integration tests..."
+	@chmod +x $(TEST_DIR)/integration_test.sh
+	sudo $(TEST_DIR)/integration_test.sh
