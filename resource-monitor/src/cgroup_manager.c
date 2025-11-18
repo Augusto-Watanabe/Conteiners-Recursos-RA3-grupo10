@@ -794,3 +794,73 @@ if (metrics->has_pids) {
     printf("\n");
 }
 }
+
+int create_cgroup_for_controllers(const char *name,
+                                  char *cpu_path_out, size_t cpu_path_size,
+                                  char *mem_path_out, size_t mem_path_size) {
+    if (name == NULL || cpu_path_out == NULL || mem_path_out == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    int version = detect_cgroup_version();
+    if (version == 2) {
+        // v2: Unified hierarchy
+        snprintf(cpu_path_out, cpu_path_size, "/sys/fs/cgroup/%s", name);
+        strncpy(mem_path_out, cpu_path_out, mem_path_size);
+        if (mkdir(cpu_path_out, 0755) != 0 && errno != EEXIST) {
+            return -1;
+        }
+    } else if (version == 1) {
+        // v1: Separate hierarchies
+        snprintf(cpu_path_out, cpu_path_size, "/sys/fs/cgroup/cpu/%s", name);
+        if (mkdir(cpu_path_out, 0755) != 0 && errno != EEXIST) {
+            return -1;
+        }
+        snprintf(mem_path_out, mem_path_size, "/sys/fs/cgroup/memory/%s", name);
+        if (mkdir(mem_path_out, 0755) != 0 && errno != EEXIST) {
+            // Se a criação da memória falhar, tente remover o de cpu para limpar
+            rmdir(cpu_path_out);
+            return -1;
+        }
+    } else {
+        return -1; // Unknown version
+    }
+    return 0;
+}
+
+int read_cgroup_metrics_from_path(const char *cpu_path, const char *mem_path, cgroup_metrics_t *metrics) {
+    if (cpu_path == NULL || mem_path == NULL || metrics == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    memset(metrics, 0, sizeof(cgroup_metrics_t));
+    metrics->info.version = detect_cgroup_version();
+    strncpy(metrics->info.path, cpu_path, sizeof(metrics->info.path) - 1);
+
+    metrics->has_cpu = (read_cgroup_cpu_metrics(cpu_path, &metrics->cpu) == 0);
+    metrics->has_memory = (read_cgroup_memory_metrics(mem_path, &metrics->memory) == 0);
+    // blkio e pids podem ser adicionados aqui se necessário
+
+    return (metrics->has_cpu || metrics->has_memory) ? 0 : -1;
+}
+
+void cleanup_cgroup(const char *name) {
+    if (name == NULL) {
+        return;
+    }
+
+    int version = detect_cgroup_version();
+    char path[PATH_MAX];
+
+    if (version == 2) {
+        snprintf(path, sizeof(path), "/sys/fs/cgroup/%s", name);
+        rmdir(path);
+    } else if (version == 1) {
+        snprintf(path, sizeof(path), "/sys/fs/cgroup/cpu/%s", name);
+        rmdir(path);
+        snprintf(path, sizeof(path), "/sys/fs/cgroup/memory/%s", name);
+        rmdir(path);
+    }
+}

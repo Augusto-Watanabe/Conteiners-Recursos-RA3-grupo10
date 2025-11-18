@@ -217,6 +217,14 @@ int set_cgroup_memory_limit(const char *cgroup_path, uint64_t bytes);
  */
 int set_cgroup_io_limit(const char *cgroup_path, const char *device,
                        uint64_t rbps, uint64_t wbps);
+// Funções auxiliares para o main
+int create_cgroup_for_controllers(const char *name,
+                                  char *cpu_path_out, size_t cpu_path_size,
+                                  char *mem_path_out, size_t mem_path_size);
+
+int read_cgroup_metrics_from_path(const char *cpu_path, const char *mem_path, cgroup_metrics_t *metrics);
+
+void cleanup_cgroup(const char *name);
 
 // ============================================================================
 // Funções de Impressão
