@@ -27,6 +27,7 @@ OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 TEST_SOURCES = $(wildcard $(TEST_DIR)/*.c)
 TEST_OBJECTS = $(TEST_SOURCES:$(TEST_DIR)/%.c=$(OBJ_DIR)/%.o)
 TEST_BINS = $(TEST_SOURCES:$(TEST_DIR)/%.c=$(BIN_DIR)/%)
+EXPERIMENT_DIR = experimentos
 
 # Executável principal
 TARGET = $(BIN_DIR)/resource-monitor
@@ -91,6 +92,68 @@ run-tests: tests
 		sudo $$test || exit 1; \
 	done
 	@echo "All tests passed!"
+
+.PHONY: integration-test
+integration-test: all
+	@echo "Running integration tests..."
+	@chmod +x $(TEST_DIR)/integration_test.sh
+	sudo $(TEST_DIR)/integration_test.sh
+
+# ==============================================================================
+# Experimentos
+# ==============================================================================
+
+.PHONY: experiment-overhead
+experiment-overhead: $(BIN_DIR)/cpu_workload all
+	@chmod +x $(EXPERIMENT_DIR)/exp1_overhead.sh
+	@./$(EXPERIMENT_DIR)/exp1_overhead.sh
+
+# Regra para compilar o workload do experimento
+$(BIN_DIR)/cpu_workload: $(EXPERIMENT_DIR)/cpu_workload.c
+	@echo "Compiling CPU workload..."
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
+
+.PHONY: experiment-namespaces
+experiment-namespaces: $(BIN_DIR)/exp2_namespaces all
+	@chmod +x $(EXPERIMENT_DIR)/exp2_namespaces.sh
+	@./$(EXPERIMENT_DIR)/exp2_namespaces.sh
+
+# Regra para compilar a ferramenta do experimento 2
+$(BIN_DIR)/exp2_namespaces: $(EXPERIMENT_DIR)/exp2_namespaces.c
+	@echo "Compiling Namespace experiment tool..."
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
+
+.PHONY: experiment-throttling
+experiment-throttling: $(BIN_DIR)/cpu_workload all
+	@chmod +x $(EXPERIMENT_DIR)/exp3_throttling.sh
+	@./$(EXPERIMENT_DIR)/exp3_throttling.sh
+
+.PHONY: experiment-memory
+experiment-memory: $(BIN_DIR)/mem_workload all
+	@chmod +x $(EXPERIMENT_DIR)/exp4_memory_limit.sh
+	@./$(EXPERIMENT_DIR)/exp4_memory_limit.sh
+
+# Regra para compilar o workload do experimento 4
+$(BIN_DIR)/mem_workload: $(EXPERIMENT_DIR)/mem_workload.c
+	@echo "Compiling Memory workload..."
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
+
+.PHONY: experiment-io
+experiment-io: $(BIN_DIR)/io_workload all
+	@chmod +x $(EXPERIMENT_DIR)/exp5_io_limit.sh
+	@./$(EXPERIMENT_DIR)/exp5_io_limit.sh
+
+# Regra para compilar o workload do experimento 5
+$(BIN_DIR)/io_workload: $(EXPERIMENT_DIR)/io_workload.c
+	@echo "Compiling I/O workload..."
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
+
+
+
 
 # ==============================================================================
 # Limpeza
@@ -196,6 +259,12 @@ help:
 	@echo "=========================================="
 	@echo "  all          : Build the main program (default)"
 	@echo "  tests        : Build all test programs"
+	@echo "  experiment-io: Run the I/O limit precision experiment"
+	@echo "  experiment-memory: Run the memory limit enforcement experiment"
+	@echo "  experiment-throttling: Run the CPU throttling precision experiment"
+	@echo "  experiment-namespaces: Run the namespace isolation experiment"
+	@echo "  experiment-overhead: Run the monitoring overhead experiment"
+	@echo "  integration-test: Run integration test script"
 	@echo "  run-tests    : Build and run all tests"
 	@echo "  run          : Build and run the main program"
 	@echo "  clean        : Remove build artifacts"
@@ -224,9 +293,3 @@ $(OBJ_DIR)/%.d: $(SRC_DIR)/%.c
 $(OBJ_DIR)/%.d: $(TEST_DIR)/%.c
 	@mkdir -p $(OBJ_DIR)
 	@$(CC) $(CFLAGS) $(INCLUDES) -MM -MT '$(OBJ_DIR)/$*.o' $< > $@
-
-.PHONY: integration-test
-integration-test: all
-	@echo "Running integration tests..."
-	@chmod +x $(TEST_DIR)/integration_test.sh
-	sudo $(TEST_DIR)/integration_test.sh
